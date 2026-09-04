@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#EFF6FF" />
+<title>Reader</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon-192.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js").catch(() => {});
+    });
+  }
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Firebase (free tier) — provides real email/password login + cloud data storage -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  // =====================================================================
+  // PASTE YOUR OWN FIREBASE CONFIG HERE — see the setup guide for how to
+  // get these values from the Firebase console (console.firebase.google.com).
+  // These values are safe to be public; Firestore security rules do the
+  // actual protecting, not secrecy of this config.
+  // =====================================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyC8geyDFITPwPy64-k37ZwFCw7MU8dVbkA",
+    authDomain: "reader-app-9bb70.firebaseapp.com",
+    projectId: "reader-app-9bb70",
+    storageBucket: "reader-app-9bb70.firebasestorage.app",
+    messagingSenderId: "86040729317",
+    appId: "1:86040729317:web:661bdb71df3ff67426e60c",
+  };
+  firebase.initializeApp(firebaseConfig);
+</script>
+
+<style>
+  html, body { background:#EFF6FF; margin:0; padding:0; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ---------- content ----------
+const FLOW_PARAGRAPHS = {
+  easy: [
+    { text: "The sun rises in the east every morning. Birds start to sing near dawn. People wake up and begin their day. Some go for a walk. Some make a cup of tea. The city slowly comes to life. Cars fill the roads. Shops open their doors. The morning feels fresh and calm before the noise begins.",
+      q: { question: "What do birds start doing near dawn?", options: ["Singing", "Sleeping", "Flying south", "Building nests"], answer: 0 } },
+    { text: "A good breakfast gives the body energy for the day ahead. Simple food often works best. Fruits, eggs, and warm tea are common choices. Many people eat while checking their phone. Others prefer a quiet moment before the day gets busy. Either way, breakfast sets the tone for what comes next.",
+      q: { question: "Which drink is mentioned as a common breakfast choice?", options: ["Coffee", "Juice", "Warm tea", "Milk"], answer: 2 } },
+    { text: "Going to the gym six days a week builds real strength over time. Small weights add up when lifted again and again. Rest days matter just as much as training days. The body needs time to repair and grow. Many people track their workouts in a simple notebook. Progress often shows up slowly, then all at once.",
+      q: { question: "How many days a week does the passage mention going to the gym?", options: ["Three", "Five", "Six", "Seven"], answer: 2 } },
+    { text: "Sunday football brings the whole group together. Some players are fast, others are strong, and a few are simply funny to watch. The match usually lasts about an hour. Afterward everyone grabs a cold drink and talks about the best moves. It becomes the highlight of the week for many friends.",
+      q: { question: "What do the players do after the football match?", options: ["Go home immediately", "Grab a cold drink and talk", "Start another match", "Watch television"], answer: 1 } },
+    { text: "Dark clouds gathered quickly over the city that afternoon. Within minutes, heavy rain began to fall on the streets below. People rushed to find shelter under shop roofs. Umbrellas opened all along the road. By evening the storm had passed, leaving the air clean and cool.",
+      q: { question: "What happened by evening?", options: ["The storm had passed", "It started snowing", "The sun never came out", "The city flooded"], answer: 0 } },
+    { text: "A new phone often feels exciting for the first few days. Bright screens and fast apps make everyday tasks simple. Charging it every night becomes a small daily habit. Over time, people fill it with photos, messages, and notes. It quietly becomes a tool nobody wants to be without.",
+      q: { question: "What becomes a small daily habit, per the passage?", options: ["Cleaning the screen", "Charging the phone every night", "Buying new apps", "Taking photos"], answer: 1 } },
+  ],
+  medium: [
+    { text: "Consistent practice builds skill far more reliably than occasional bursts of effort. A person who reads a little every single day will improve faster than someone who reads for hours only once a month. The brain adapts gradually, strengthening pathways through repetition rather than intensity alone. Small, steady habits compound into significant results over time, even when the daily progress feels invisible.",
+      q: { question: "What helps someone improve faster, per the passage?", options: ["Reading for hours once a month", "Reading a little every day", "Skipping weak days", "Reading only hard books"], answer: 1 } },
+    { text: "Focus is a skill like any other, and it responds to training. Constant notifications and quick scrolling habits slowly erode the ability to sit with a single task. Rebuilding that ability takes deliberate practice, starting with short, distraction free sessions and gradually extending them. Over weeks, what once felt uncomfortable begins to feel natural.",
+      q: { question: "What erodes the ability to focus, per the passage?", options: ["Sleeping well", "Notifications and scrolling", "Exercise", "Reading books"], answer: 1 } },
+    { text: "Learning to code rewards patience more than raw intelligence. Early mistakes are part of the process, not signs of failure. Every error message is really just useful feedback in disguise. Beginners who keep experimenting, even slowly, tend to improve much faster than those who wait until they feel fully ready.",
+      q: { question: "What do error messages represent, according to the passage?", options: ["Signs of failure", "Useless noise", "Useful feedback in disguise", "A reason to quit"], answer: 2 } },
+    { text: "Sleep is often the most ignored part of any fitness or study routine. The body repairs muscle and the brain organizes memory mostly during deep sleep. Cutting sleep short to work longer usually backfires within a few days. Protecting a consistent bedtime often does more for performance than any other single habit.",
+      q: { question: "What does the passage say often does the most for performance?", options: ["A consistent bedtime", "More caffeine", "Working longer hours", "Skipping breakfast"], answer: 0 } },
+    { text: "Saving a small amount every month feels unimportant at first glance. Yet compounded over several years, those small amounts grow into something meaningful. The habit matters more than the exact number saved. People who start early, even with tiny amounts, often end up ahead of those who wait for a bigger income.",
+      q: { question: "According to the passage, what matters more than the exact amount saved?", options: ["The habit of saving", "The bank chosen", "The interest rate", "The starting income"], answer: 0 } },
+    { text: "Traveling to an unfamiliar city forces quick problem solving. Reading signs in another language, finding transport, and adjusting to new food all sharpen the mind in ways a familiar routine rarely does. Many travelers say they learn more about themselves in a single unfamiliar week than in months at home.",
+      q: { question: "What does traveling to an unfamiliar city force, per the passage?", options: ["Quick problem solving", "Slower thinking", "More spending", "Less curiosity"], answer: 0 } },
+  ],
+  hard: [
+    { text: "The relationship between attention and comprehension is more intricate than most readers assume, since rapid visual exposure to text can outpace the brain's capacity for semantic integration even when word recognition itself remains effortless. Skilled readers compensate through predictive processing, anticipating likely continuations based on syntax and context, which reduces the cognitive load required to parse unfamiliar or complex sentence structures.",
+      q: { question: "What helps skilled readers handle complex sentences?", options: ["Reading slower always", "Ignoring punctuation", "Predictive processing from context", "Avoiding new vocabulary"], answer: 2 } },
+    { text: "Expertise in any domain tends to emerge not from raw exposure but from structured, deliberate engagement with material that sits just beyond current capability. Reading is no exception, and readers who consistently challenge themselves with denser vocabulary and longer sentence structures tend to develop both faster recognition and deeper retention of what they encounter.",
+      q: { question: "Where does expertise mainly come from, per the passage?", options: ["Natural talent", "Passive exposure", "Deliberate engagement beyond current ability", "Reading only easy material"], answer: 2 } },
+    { text: "Entrepreneurs often romanticize the initial spark of an idea while underestimating the unglamorous execution that follows. Sustained success typically depends less on the originality of a concept and more on the founder's tolerance for repeated, incremental failure. Those who treat early rejection as data rather than verdict tend to iterate their way toward something that eventually works.",
+      q: { question: "What does sustained entrepreneurial success typically depend on, per the passage?", options: ["Idea originality alone", "Tolerance for repeated incremental failure", "Avoiding all rejection", "Luck exclusively"], answer: 1 } },
+    { text: "As artificial intelligence systems grow more capable, the bottleneck in many workflows shifts from raw computation to the clarity of the instructions given to them. Precise, well structured prompts consistently outperform vague ones, suggesting that communication skill, not just technical skill, is becoming a core competency for anyone working closely with these tools.",
+      q: { question: "What does the passage suggest is becoming a core competency?", options: ["Raw computation speed", "Communication skill", "Hardware assembly", "Memorizing code syntax"], answer: 1 } },
+    { text: "Habit formation research suggests that identity change often precedes lasting behavior change, rather than the reverse. Someone who begins to see themselves as a person who reads, rather than someone trying to read more, tends to sustain the behavior longer, because the habit becomes self reinforcing instead of relying purely on willpower.",
+      q: { question: "According to the passage, what often precedes lasting behavior change?", options: ["Willpower alone", "Identity change", "Financial incentives", "Social pressure"], answer: 1 } },
+    { text: "Discipline is frequently framed as a battle against desire, yet in practice it functions more like architecture than combat. Structuring an environment so that the desired action requires the least friction, while the undesired action requires the most, tends to outperform sheer willpower over any meaningful stretch of time.",
+      q: { question: "What does discipline function more like, according to the passage?", options: ["A battle against desire", "Architecture that shapes friction", "Pure willpower", "Random chance"], answer: 1 } },
+  ],
+};
+
+const SENTENCE_POOLS = {
+  easy: ["The cat sat quietly by the window.","She poured a cup of hot tea.","The train arrived exactly on time.","He tied his shoes and left for work.","Rain tapped gently against the glass.","The market was busy on Saturday morning.","A soft breeze moved through the trees.","They watched the sunset from the roof.","He waters the plants every single morning.","The bakery smells amazing early in the day.","She packed her bag before going to bed.","The dog waited patiently by the front door.","Kids played cricket in the empty lot.","The library stays open until nine at night.","A gentle fog covered the hills at sunrise.","He fixed the broken chair in an hour.","The bus was late again on Monday.","They shared a pizza after the long walk.","The old clock still keeps perfect time.","She learned to ride a bicycle last summer."],
+  medium: ["Discipline beats motivation when things get hard.","The gym session today felt unusually productive.","Learning something new takes consistent daily practice.","Good habits compound over a long period of time.","Every expert was once a complete beginner.","Reading a little each day adds up quickly.","Focus improves the moment distractions are removed.","Progress is often invisible until you look back.","Small wins build the confidence needed for bigger ones.","He rewired the old motor just to see how it worked.","The startup pivoted twice before finding real traction.","Clear thinking usually starts with clear writing.","Her code finally compiled after three failed attempts.","A tidy workspace often leads to a tidier mind.","The interview went better than he had expected.","They tested the prototype until it stopped failing.","Momentum is easier to keep than to create.","He replaced the panel and the screen lit up again.","The mentor asked harder questions than expected.","Growth rarely happens inside the comfort zone."],
+  hard: ["Consistency in practice matters more than sudden bursts of motivation.","The recursive function calls itself until the base case is satisfied.","Building anything meaningful requires patience and stubborn persistence.","Skilled readers anticipate meaning before finishing each individual word.","A well structured routine quietly outperforms sporadic intense effort.","Comprehension depends on integration, not merely on rapid recognition.","Deliberate practice targets the exact edge of current ability.","Complex ideas often hide inside deceptively simple looking sentences.","The circuit failed only under specific voltage conditions.","Ambiguous requirements are often the true source of project delays.","Her thesis challenged a widely accepted assumption in the field.","Iterating quickly beats planning perfectly almost every time.","The algorithm's complexity grew faster than anticipated at scale.","Founders who listen closely often out execute louder competitors.","Precision in language often reveals precision in thought.","The debugging session revealed a subtle race condition.","Long term thinking rarely feels rewarding in the short term.","Their architecture decisions today will constrain choices for years.","Genuine curiosity tends to outlast forced motivation.","The experiment's results contradicted the initial hypothesis entirely."],
+};
+
+function pickN(arr, n) {
+  const copy = [...arr];
+  const out = [];
+  for (let k = 0; k < n && copy.length; k++) {
+    const idx = Math.floor(Math.random() * copy.length);
+    out.push(copy[idx]);
+    copy.splice(idx, 1);
+  }
+  return out;
+}
+function buildLadderRounds() {
+  return [...pickN(FLOW_PARAGRAPHS.easy, 2), ...pickN(FLOW_PARAGRAPHS.medium, 2), ...pickN(FLOW_PARAGRAPHS.hard, 2)];
+}
+const LADDER_STEP = 40;
+const LADDER_STARTS = [
+  { label: "Careful", wpm: 180 },
+  { label: "Balanced", wpm: 240 },
+  { label: "Bold", wpm: 300 },
+];
+
+const ACHIEVEMENTS = {
+  first_session: { label: "First Steps", desc: "Complete your first session" },
+  speed_300: { label: "300 Club", desc: "Hit 300 wpm actual pace" },
+  streak_3: { label: "On a Roll", desc: "3 day streak" },
+  streak_7: { label: "Habit Formed", desc: "7 day streak" },
+  challenger: { label: "Challenger", desc: "Play a Speed Ladder run" },
+  ladder_master: { label: "Ladder Master", desc: "Clear all 6 rounds" },
+  own_words: { label: "Bring Your Own", desc: "Read text you imported yourself" },
+  bookworm: { label: "Bookworm", desc: "Complete 10 sessions" },
+  sharp_memory: { label: "Sharp Memory", desc: "Get all 3 correct in Recall Rush" },
+  marathoner: { label: "Marathoner", desc: "Survive 15 rounds in Marathon mode" },
+  ai_explorer: { label: "AI Explorer", desc: "Read an AI-generated passage" },
+};
+
+function orpIndex(word) {
+  const len = word.length;
+  if (len <= 1) return 0;
+  if (len <= 5) return 1;
+  if (len <= 9) return 2;
+  if (len <= 13) return 3;
+  return 4;
+}
+const XP_STEP = 150;
+const levelOf = (xp) => 1 + Math.floor(xp / XP_STEP);
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+const DEFAULT_PROFILE = { xp: 0, streak: 0, lastPlayed: null, achievements: [], bestLadderWpm: 0, totalSessions: 0, lastLadderDate: null, marathonBest: 0, theme: "blue1", lang: "en", history: [] };
+
+const ALL_PARAGRAPHS = [...FLOW_PARAGRAPHS.easy, ...FLOW_PARAGRAPHS.medium, ...FLOW_PARAGRAPHS.hard];
+
+// ---------- themes: 4 color families x 3 shades each, applied via CSS variables ----------
+const FAMILY_ORDER = ["blue", "pink", "red", "brown"];
+const THEMES = {
+  blue1: { name: "Sky",      family: "blue",  swatch: "#93C5FD", vars: { page:"#EFF6FF", card:"#DBEAFE", cardBorder:"#BFDBFE", dark:"#1E3A5F", darkText:"#EFF6FF", primary:"#93C5FD", primaryText:"#1E3A5F", selected:"#3B82F6", selectedText:"#FFFFFF", text:"#1E293B", muted:"#64748B" } },
+  blue2: { name: "Ocean",    family: "blue",  swatch: "#7DD3FC", vars: { page:"#E0F2FE", card:"#BAE6FD", cardBorder:"#7DD3FC", dark:"#0C4A6E", darkText:"#E0F2FE", primary:"#7DD3FC", primaryText:"#0C4A6E", selected:"#0284C7", selectedText:"#FFFFFF", text:"#0C1B2A", muted:"#4B6478" } },
+  blue3: { name: "Navy",     family: "blue",  swatch: "#A5B4FC", vars: { page:"#EEF2FF", card:"#C7D2FE", cardBorder:"#A5B4FC", dark:"#1E1B4B", darkText:"#EEF2FF", primary:"#A5B4FC", primaryText:"#1E1B4B", selected:"#4338CA", selectedText:"#FFFFFF", text:"#1E1B3A", muted:"#5B5F8A" } },
+  pink1: { name: "Blush",    family: "pink",  swatch: "#F9A8D4", vars: { page:"#FFF1F5", card:"#FCE7F3", cardBorder:"#FBCFE8", dark:"#831843", darkText:"#FFF1F5", primary:"#F9A8D4", primaryText:"#831843", selected:"#EC4899", selectedText:"#FFFFFF", text:"#500724", muted:"#9D6B82" } },
+  pink2: { name: "Rose",     family: "pink",  swatch: "#FB7185", vars: { page:"#FFF0F3", card:"#FFD6E0", cardBorder:"#FCA5C0", dark:"#6B1230", darkText:"#FFF0F3", primary:"#FB7185", primaryText:"#6B1230", selected:"#E11D48", selectedText:"#FFFFFF", text:"#4A0E20", muted:"#96687A" } },
+  pink3: { name: "Magenta",  family: "pink",  swatch: "#E879C9", vars: { page:"#FDF2FB", card:"#F9D0F0", cardBorder:"#F0ABE0", dark:"#59114F", darkText:"#FDF2FB", primary:"#E879C9", primaryText:"#59114F", selected:"#C026D3", selectedText:"#FFFFFF", text:"#43103D", muted:"#8A6084" } },
+  red1: { name: "Coral",     family: "red",   swatch: "#FDA07C", vars: { page:"#FFF5F3", card:"#FFE0DA", cardBorder:"#FEC5B8", dark:"#7C2D12", darkText:"#FFF5F3", primary:"#FDA07C", primaryText:"#7C2D12", selected:"#EA580C", selectedText:"#FFFFFF", text:"#431407", muted:"#9A6E5C" } },
+  red2: { name: "Crimson",   family: "red",   swatch: "#F87171", vars: { page:"#FEF2F2", card:"#FECACA", cardBorder:"#FCA5A5", dark:"#7F1D1D", darkText:"#FEF2F2", primary:"#F87171", primaryText:"#7F1D1D", selected:"#DC2626", selectedText:"#FFFFFF", text:"#450A0A", muted:"#9A6A6A" } },
+  red3: { name: "Maroon",    family: "red",   swatch: "#C86464", vars: { page:"#FBEEEE", card:"#F3C9C9", cardBorder:"#E39B9B", dark:"#4A0E0E", darkText:"#FBEEEE", primary:"#C86464", primaryText:"#FBEEEE", selected:"#991B1B", selectedText:"#FFFFFF", text:"#3A0A0A", muted:"#8A6060" } },
+  brown1: { name: "Latte",    family: "brown", swatch: "#C9A16D", vars: { page:"#FAF3EC", card:"#EDDFCB", cardBorder:"#DFC7A4", dark:"#4A3728", darkText:"#FAF3EC", primary:"#C9A16D", primaryText:"#3A2A1C", selected:"#92603A", selectedText:"#FFFFFF", text:"#2E2115", muted:"#8A7259" } },
+  brown2: { name: "Coffee",   family: "brown", swatch: "#B3906B", vars: { page:"#F3EBE3", card:"#DEC9B4", cardBorder:"#C6A886", dark:"#3D2B1F", darkText:"#F3EBE3", primary:"#B3906B", primaryText:"#2E2115", selected:"#6F4525", selectedText:"#FFFFFF", text:"#241A11", muted:"#7A6250" } },
+  brown3: { name: "Espresso", family: "brown", swatch: "#8B6B4A", vars: { page:"#EFE6DC", card:"#CBB299", cardBorder:"#AE8F70", dark:"#2A1D14", darkText:"#EFE6DC", primary:"#8B6B4A", primaryText:"#EFE6DC", selected:"#5C3D22", selectedText:"#FFFFFF", text:"#241A10", muted:"#6E5A46" } },
+};
+
+// ---------- languages (UI chrome only — reading content stays in English) ----------
+const STRINGS = {
+  en: { appName:"Reader", tagline:"Train your reading pace, or push it in a game that gets tougher every round.", practiceTitle:"Practice", practiceDesc:"Pick your own pace and difficulty. Build consistency at your own speed.", startPractice:"Start practice", ladderTitle:"⚡ Speed Ladder", ladderDesc:"Every round reads faster than the last. Answer right to climb, miss twice and it's over.", climbLadder:"Climb the ladder", dailyBonusAvail:"🎁 +30 bonus XP for today's first run", dailyBonusClaimed:"✅ Today's daily bonus claimed", importTitle:"📄 Import Your Text", importDesc:"Paste an article, notes, or upload a .txt file — read it at your own pace.", bringOwn:"Bring your own text", recallTitle:"🧠 Recall Rush", recallDesc:"Read 3 passages back to back, then answer fast before the timer runs out.", startRecall:"Start recall rush", marathonTitle:"🏃 Marathon", marathonDesc:"Fixed pace, no speed jumps — just see how many rounds you can survive.", startMarathon:"Start marathon", achievementsLink:"achievements — view all", back:"← Back", setPace:"Set your pace", mode:"Mode", flowWord:"Flow (word)", sentencesLabel:"Sentences", difficulty:"Difficulty", speedLabel:"Speed", startReading:"Start reading", pause:"Pause", resume:"Resume", quickCheck:"Quick check", goAgain:"Go again", home:"Home", easy:"Easy", medium:"Medium", hard:"Hard", yourText:"Your text", pasteHint:"Paste anything below, or upload a .txt file.", uploadTxt:"📎 Upload a .txt file instead", theme:"Theme", language:"Language" },
+  hi: { appName:"रीडर", tagline:"अपनी पढ़ने की रफ़्तार बढ़ाओ, या हर राउंड में मुश्किल होते गेम में खुद को आज़माओ।", practiceTitle:"अभ्यास", practiceDesc:"अपनी पसंद की रफ़्तार और कठिनाई चुनो। धीरे-धीरे बेहतर बनो।", startPractice:"अभ्यास शुरू करें", ladderTitle:"⚡ स्पीड लैडर", ladderDesc:"हर राउंड पिछले से तेज़ होता है। सही जवाब दो तो आगे बढ़ो, दो बार गलत हुए तो खेल खत्म।", climbLadder:"लैडर चढ़ें", dailyBonusAvail:"🎁 आज के पहले राउंड पर +30 बोनस XP", dailyBonusClaimed:"✅ आज का बोनस मिल चुका है", importTitle:"📄 अपना टेक्स्ट डालें", importDesc:"कोई भी लेख, नोट्स पेस्ट करो, या .txt फ़ाइल अपलोड करो।", bringOwn:"अपना टेक्स्ट लाएं", recallTitle:"🧠 रीकॉल रश", recallDesc:"लगातार 3 पैराग्राफ पढ़ो, फिर टाइमर खत्म होने से पहले जवाब दो।", startRecall:"रीकॉल रश शुरू करें", marathonTitle:"🏃 मैराथन", marathonDesc:"रफ़्तार एक जैसी रहती है — देखो कितने राउंड तक टिक पाते हो।", startMarathon:"मैराथन शुरू करें", achievementsLink:"उपलब्धियां — सभी देखें", back:"← वापस", setPace:"अपनी रफ़्तार चुनें", mode:"मोड", flowWord:"फ्लो (शब्द)", sentencesLabel:"वाक्य", difficulty:"कठिनाई", speedLabel:"रफ़्तार", startReading:"पढ़ना शुरू करें", pause:"रोकें", resume:"जारी रखें", quickCheck:"छोटा सवाल", goAgain:"फिर से खेलें", home:"होम", easy:"आसान", medium:"मध्यम", hard:"कठिन", yourText:"आपका टेक्स्ट", pasteHint:"नीचे कुछ भी पेस्ट करें, या .txt फ़ाइल अपलोड करें।", uploadTxt:"📎 इसके बजाय .txt फ़ाइल अपलोड करें", theme:"थीम", language:"भाषा" },
+  ta: { appName:"ரீடர்", tagline:"உங்கள் வாசிப்பு வேகத்தை பயிற்சி செய்யுங்கள், அல்லது ஒவ்வொரு சுற்றிலும் கடினமாகும் விளையாட்டில் முயற்சி செய்யுங்கள்.", practiceTitle:"பயிற்சி", practiceDesc:"உங்கள் வேகத்தையும் கடினத்தையும் தேர்ந்தெடுங்கள்.", startPractice:"பயிற்சியைத் தொடங்கு", ladderTitle:"⚡ ஸ்பீட் லேடர்", ladderDesc:"ஒவ்வொரு சுற்றும் முந்தையதை விட வேகமாக இருக்கும். சரியாக பதில் சொன்னால் ஏறுவீர்கள், இரண்டு முறை தவறினால் முடிந்தது.", climbLadder:"லேடரை ஏறு", dailyBonusAvail:"🎁 இன்றைய முதல் ரவுண்டுக்கு +30 போனஸ் XP", dailyBonusClaimed:"✅ இன்றைய போனஸ் பெறப்பட்டது", importTitle:"📄 உங்கள் உரையை இறக்குமதி செய்யுங்கள்", importDesc:"ஒரு கட்டுரையை ஒட்டவும் அல்லது .txt கோப்பை பதிவேற்றவும்.", bringOwn:"உங்கள் உரையை கொண்டு வாருங்கள்", recallTitle:"🧠 ரீகால் ரஷ்", recallDesc:"3 பத்திகளை தொடர்ந்து படியுங்கள், பின்பு நேரம் முடிவதற்குள் பதில் சொல்லுங்கள்.", startRecall:"ரீகால் ரஷ் தொடங்கு", marathonTitle:"🏃 மாரத்தான்", marathonDesc:"வேகம் மாறாது — எத்தனை சுற்று தாக்குப்பிடிக்கிறீர்கள் என பாருங்கள்.", startMarathon:"மாரத்தான் தொடங்கு", achievementsLink:"சாதனைகள் — அனைத்தையும் காண்க", back:"← பின்செல்", setPace:"உங்கள் வேகத்தை அமைக்கவும்", mode:"முறை", flowWord:"ஃப்ளோ (சொல்)", sentencesLabel:"வாக்கியங்கள்", difficulty:"கடினம்", speedLabel:"வேகம்", startReading:"வாசிப்பைத் தொடங்கு", pause:"இடைநிறுத்து", resume:"தொடரவும்", quickCheck:"சிறிய கேள்வி", goAgain:"மீண்டும் விளையாடு", home:"முகப்பு", easy:"எளிது", medium:"நடுத்தரம்", hard:"கடினம்", yourText:"உங்கள் உரை", pasteHint:"கீழே ஏதேனும் ஒட்டவும் அல்லது .txt கோப்பை பதிவேற்றவும்.", uploadTxt:"📎 அதற்கு பதிலாக .txt கோப்பை பதிவேற்று", theme:"தீம்", language:"மொழி" },
+  te: { appName:"రీడర్", tagline:"మీ చదవడం వేగాన్ని పెంచుకోండి, లేదా ప్రతి రౌండ్‌లో కష్టమయ్యే గేమ్‌లో ప్రయత్నించండి.", practiceTitle:"ప్రాక్టీస్", practiceDesc:"మీ వేగం మరియు కష్టతను ఎంచుకోండి.", startPractice:"ప్రాక్టీస్ ప్రారంభించండి", ladderTitle:"⚡ స్పీడ్ లాడర్", ladderDesc:"ప్రతి రౌండ్ మునుపటి కంటే వేగంగా ఉంటుంది. సరిగ్గా సమాధానం ఇస్తే ముందుకు వెళ్తారు, రెండుసార్లు తప్పితే ఆట ముగుస్తుంది.", climbLadder:"లాడర్ ఎక్కండి", dailyBonusAvail:"🎁 నేటి మొదటి రౌండ్‌కు +30 బోనస్ XP", dailyBonusClaimed:"✅ నేటి బోనస్ పొందారు", importTitle:"📄 మీ టెక్స్ట్ దిగుమతి చేయండి", importDesc:"ఏదైనా వ్యాసం అతికించండి లేదా .txt ఫైల్ అప్‌లోడ్ చేయండి.", bringOwn:"మీ టెక్స్ట్ తీసుకురండి", recallTitle:"🧠 రీకాల్ రష్", recallDesc:"వరుసగా 3 పేరాలు చదవండి, తర్వాత టైమర్ అయిపోకముందే సమాధానం ఇవ్వండి.", startRecall:"రీకాల్ రష్ ప్రారంభించండి", marathonTitle:"🏃 మారథాన్", marathonDesc:"వేగం స్థిరంగా ఉంటుంది — ఎన్ని రౌండ్లు తట్టుకుంటారో చూడండి.", startMarathon:"మారథాన్ ప్రారంభించండి", achievementsLink:"విజయాలు — అన్నీ చూడండి", back:"← వెనక్కి", setPace:"మీ వేగాన్ని సెట్ చేయండి", mode:"మోడ్", flowWord:"ఫ్లో (పదం)", sentencesLabel:"వాక్యాలు", difficulty:"కష్టత", speedLabel:"వేగం", startReading:"చదవడం ప్రారంభించండి", pause:"పాజ్", resume:"కొనసాగించు", quickCheck:"చిన్న ప్రశ్న", goAgain:"మళ్ళీ ఆడండి", home:"హోమ్", easy:"సులభం", medium:"మధ్యస్థం", hard:"కష్టం", yourText:"మీ టెక్స్ట్", pasteHint:"కింద ఏదైనా అతికించండి లేదా .txt ఫైల్ అప్‌లోడ్ చేయండి.", uploadTxt:"📎 బదులుగా .txt ఫైల్ అప్‌లోడ్ చేయండి", theme:"థీమ్", language:"భాష" },
+  bn: { appName:"রিডার", tagline:"আপনার পড়ার গতি বাড়ান, অথবা প্রতি রাউন্ডে কঠিন হয়ে ওঠা গেমে চেষ্টা করুন।", practiceTitle:"অনুশীলন", practiceDesc:"আপনার নিজের গতি ও কঠিনতা বেছে নিন।", startPractice:"অনুশীলন শুরু করুন", ladderTitle:"⚡ স্পিড ল্যাডার", ladderDesc:"প্রতিটি রাউন্ড আগেরটার চেয়ে দ্রুত হয়। সঠিক উত্তর দিলে এগিয়ে যাবেন, দুইবার ভুল করলে খেলা শেষ।", climbLadder:"ল্যাডার চড়ুন", dailyBonusAvail:"🎁 আজকের প্রথম রাউন্ডে +৩০ বোনাস XP", dailyBonusClaimed:"✅ আজকের বোনাস পাওয়া হয়ে গেছে", importTitle:"📄 নিজের লেখা আমদানি করুন", importDesc:"যেকোনো লেখা পেস্ট করুন, বা .txt ফাইল আপলোড করুন।", bringOwn:"নিজের লেখা আনুন", recallTitle:"🧠 রিকল রাশ", recallDesc:"পরপর ৩টি অনুচ্ছেদ পড়ুন, তারপর সময় শেষ হওয়ার আগে উত্তর দিন।", startRecall:"রিকল রাশ শুরু করুন", marathonTitle:"🏃 ম্যারাথন", marathonDesc:"গতি স্থির থাকে — দেখুন কত রাউন্ড টিকে থাকতে পারেন।", startMarathon:"ম্যারাথন শুরু করুন", achievementsLink:"অর্জন — সব দেখুন", back:"← ফিরে যান", setPace:"আপনার গতি ঠিক করুন", mode:"মোড", flowWord:"ফ্লো (শব্দ)", sentencesLabel:"বাক্য", difficulty:"কঠিনতা", speedLabel:"গতি", startReading:"পড়া শুরু করুন", pause:"থামান", resume:"চালিয়ে যান", quickCheck:"ছোট প্রশ্ন", goAgain:"আবার খেলুন", home:"হোম", easy:"সহজ", medium:"মাঝারি", hard:"কঠিন", yourText:"আপনার লেখা", pasteHint:"নিচে যেকোনো কিছু পেস্ট করুন, বা .txt ফাইল আপলোড করুন।", uploadTxt:"📎 এর বদলে .txt ফাইল আপলোড করুন", theme:"থিম", language:"ভাষা" },
+  mr: { appName:"रीडर", tagline:"तुमचा वाचनाचा वेग वाढवा, किंवा प्रत्येक फेरीत अवघड होणाऱ्या खेळात प्रयत्न करा.", practiceTitle:"सराव", practiceDesc:"तुमचा वेग आणि अवघडपणा निवडा.", startPractice:"सराव सुरू करा", ladderTitle:"⚡ स्पीड लॅडर", ladderDesc:"प्रत्येक फेरी आधीच्यापेक्षा वेगवान असते. बरोबर उत्तर दिल्यास पुढे जाल, दोनदा चुकल्यास खेळ संपतो.", climbLadder:"लॅडर चढा", dailyBonusAvail:"🎁 आजच्या पहिल्या फेरीसाठी +३० बोनस XP", dailyBonusClaimed:"✅ आजचा बोनस मिळाला आहे", importTitle:"📄 तुमचा मजकूर आणा", importDesc:"कोणताही लेख पेस्ट करा, किंवा .txt फाइल अपलोड करा.", bringOwn:"तुमचा मजकूर आणा", recallTitle:"🧠 रिकॉल रश", recallDesc:"सलग ३ परिच्छेद वाचा, मग वेळ संपण्याआधी उत्तर द्या.", startRecall:"रिकॉल रश सुरू करा", marathonTitle:"🏃 मॅरेथॉन", marathonDesc:"वेग स्थिर राहतो — किती फेऱ्या टिकता येते बघा.", startMarathon:"मॅरेथॉन सुरू करा", achievementsLink:"कामगिरी — सर्व पहा", back:"← मागे", setPace:"तुमचा वेग सेट करा", mode:"मोड", flowWord:"फ्लो (शब्द)", sentencesLabel:"वाक्ये", difficulty:"अवघडपणा", speedLabel:"वेग", startReading:"वाचन सुरू करा", pause:"थांबवा", resume:"सुरू ठेवा", quickCheck:"छोटा प्रश्न", goAgain:"पुन्हा खेळा", home:"होम", easy:"सोपे", medium:"मध्यम", hard:"अवघड", yourText:"तुमचा मजकूर", pasteHint:"खाली काहीही पेस्ट करा, किंवा .txt फाइल अपलोड करा.", uploadTxt:"📎 त्याऐवजी .txt फाइल अपलोड करा", theme:"थीम", language:"भाषा" },
+};
+const LANG_LIST = [ { key:"en", native:"English" }, { key:"hi", native:"हिंदी" }, { key:"ta", native:"தமிழ்" }, { key:"te", native:"తెలుగు" }, { key:"bn", native:"বাংলা" }, { key:"mr", native:"मराठी" } ];
+const LANG_NAME_FOR_AI = { en: "English", hi: "Hindi (Devanagari script)", ta: "Tamil script", te: "Telugu script", bn: "Bengali script", mr: "Marathi (Devanagari script)" };
+
+async function callClaudeForPassage(languageKey, difficulty, topic) {
+  const languageName = LANG_NAME_FOR_AI[languageKey] || "English";
+  const topicLine = topic ? `The topic should be: ${topic}.` : "Pick any everyday, safe, non-sensitive topic.";
+  const prompt = `Write ONE short reading-practice paragraph (4-6 sentences) written entirely in ${languageName}, at a ${difficulty} reading level. ${topicLine} Then write one multiple-choice comprehension question about that paragraph (also in ${languageName}) with exactly 4 answer options where only one is correct.
+Respond with ONLY valid JSON, no markdown code fences, no extra commentary, in exactly this shape:
+{"text": "...", "question": "...", "options": ["...", "...", "...", "..."], "answer": 0}`;
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  const data = await response.json();
+  const raw = (data.content || []).map((b) => b.text || "").join("").trim();
+  const clean = raw.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(clean);
+  return { text: parsed.text, q: { question: parsed.question, options: parsed.options, answer: parsed.answer } };
+}
+
+async function callClaudeForQuiz(text, languageKey) {
+  const languageName = LANG_NAME_FOR_AI[languageKey] || "English";
+  const prompt = `Here is a passage:\n"""${text.slice(0, 3000)}"""\nWrite ONE multiple-choice comprehension question about it (in ${languageName}) with exactly 4 answer options where only one is correct.
+Respond with ONLY valid JSON, no markdown fences, no extra commentary, in exactly this shape:
+{"question": "...", "options": ["...", "...", "...", "..."], "answer": 0}`;
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 600, messages: [{ role: "user", content: prompt }] }),
+  });
+  const data = await response.json();
+  const raw = (data.content || []).map((b) => b.text || "").join("").trim();
+  const clean = raw.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean);
+}
+
+// ---------- systematic button (theme-aware via CSS variables) ----------
+function Btn({ children, onClick, variant = "primary", active = false, className = "", disabled = false }) {
+  const base = "transition-all duration-150 active:scale-95 rounded-2xl font-semibold disabled:opacity-40 disabled:active:scale-100";
+  const variants = {
+    primary: "t-btn-primary",
+    secondary: active ? "t-btn-selected shadow-sm" : "t-btn-unselected",
+    ghost: "t-btn-ghost",
+    dark: "t-btn-dark",
+  };
+  return (
+    <button onClick={onClick} disabled={disabled} className={`${base} ${variants[variant]} ${className}`}>
+      {children}
+    </button>
+  );
+}
+
+function Reader() {
+  const [screen, setScreen] = useState("login");
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authMode, setAuthMode] = useState("login"); // login | signup
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState(null);
+  const [authBusy, setAuthBusy] = useState(false);
+
+  const [runType, setRunType] = useState("practice"); // practice | ladder | marathon | recall
+  const [mode, setMode] = useState("flow");
+  const [difficulty, setDifficulty] = useState("medium");
+  const [wpm, setWpm] = useState(300);
+  const [theme, setTheme] = useState("blue1");
+  const [lang, setLang] = useState("en");
+  const t = (key) => (STRINGS[lang] && STRINGS[lang][key]) || STRINGS.en[key];
+  const T = THEMES[theme] || THEMES.blue1;
+
+  const [profile, setProfile] = useState(DEFAULT_PROFILE);
+  const [loaded, setLoaded] = useState(false);
+
+  const [tokens, setTokens] = useState([]);
+  const [sentences, setSentences] = useState([]);
+  const [index, setIndex] = useState(0);
+  const [playing, setPlaying] = useState(true);
+  const [currentQ, setCurrentQ] = useState(null);
+  const [selectedOpt, setSelectedOpt] = useState(null);
+
+  const [roundIndex, setRoundIndex] = useState(0);
+  const [lives, setLives] = useState(3);
+  const [roundWpm, setRoundWpm] = useState(240);
+
+  const [customText, setCustomText] = useState("");
+  const [customMode, setCustomMode] = useState("flow");
+  const [isCustomRun, setIsCustomRun] = useState(false);
+  const [isAiRun, setIsAiRun] = useState(false);
+
+  const [aiLang, setAiLang] = useState("hi");
+  const [aiDifficulty, setAiDifficulty] = useState("medium");
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const [quizLoading, setQuizLoading] = useState(false);
+
+  const [recallIdx, setRecallIdx] = useState(0);
+  const [recallScore, setRecallScore] = useState(0);
+  const [recallTimeLeft, setRecallTimeLeft] = useState(10);
+  const recallQueueRef = useRef([]);
+  const recallTimerRef = useRef(null);
+
+  const marathonQueueRef = useRef([]);
+  const marathonPosRef = useRef(0);
+
+  const startRef = useRef(0);
+  const totalWordsRef = useRef(0);
+  const [elapsedFinal, setElapsedFinal] = useState(0);
+  const [sessionSummary, setSessionSummary] = useState(null);
+
+  // ---- auth: watch Firebase login state ----
+  useEffect(() => {
+    const unsub = firebase.auth().onAuthStateChanged((u) => {
+      setUser(u);
+      setAuthChecked(true);
+      if (u) setScreen((s) => (s === "login" ? "home" : s));
+      else { setScreen("login"); setLoaded(false); }
+    });
+    return () => unsub();
+  }, []);
+
+  const doAuth = async () => {
+    setAuthError(null);
+    if (!authEmail.trim() || authPassword.length < 6) {
+      setAuthError("Enter a valid email and a password of at least 6 characters.");
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      if (authMode === "login") {
+        await firebase.auth().signInWithEmailAndPassword(authEmail.trim(), authPassword);
+      } else {
+        await firebase.auth().createUserWithEmailAndPassword(authEmail.trim(), authPassword);
+      }
+    } catch (e) {
+      setAuthError(e.message || "Something went wrong. Try again.");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const doLogout = async () => {
+    try { await firebase.auth().signOut(); } catch (e) {}
+  };
+
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackSent, setFeedbackSent] = useState(false);
+  const [feedbackBusy, setFeedbackBusy] = useState(false);
+
+  const submitFeedback = async () => {
+    if (!feedbackText.trim() && feedbackRating === 0) return;
+    setFeedbackBusy(true);
+    try {
+      await firebase.firestore().collection("feedback").add({
+        uid: user.uid,
+        email: user.email,
+        text: feedbackText.trim(),
+        rating: feedbackRating,
+        createdAt: Date.now(),
+      });
+      setFeedbackSent(true);
+      setFeedbackText("");
+      setFeedbackRating(0);
+    } catch (e) {
+      // fail quietly, most likely a rules issue — feedback isn't critical enough to block the user
+    } finally {
+      setFeedbackBusy(false);
+    }
+  };
+
+  // ---- load / save profile (Firestore, keyed by the logged-in user) ----
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const doc = await firebase.firestore().collection("readerProfiles").doc(user.uid).get();
+        if (doc.exists) {
+          const p = doc.data();
+          setProfile({ ...DEFAULT_PROFILE, ...p });
+          if (p.theme) setTheme(p.theme);
+          if (p.lang) setLang(p.lang);
+        }
+      } catch (e) { /* first time, no saved profile yet */ }
+      setLoaded(true);
+    })();
+  }, [user]);
+  useEffect(() => {
+    if (!loaded || !user) return;
+    const t2 = setTimeout(() => {
+      firebase.firestore().collection("readerProfiles").doc(user.uid)
+        .set({ ...profile, theme, lang }, { merge: true }).catch(() => {});
+    }, 500);
+    return () => clearTimeout(t2);
+  }, [profile, loaded, theme, lang, user]);
+
+  const finishSession = (actualWpm, wordsRead, quizCorrect, isLadder, roundsCleared, isCustom, extra = {}) => {
+    setProfile((prev) => {
+      const today = todayStr();
+      let streak = prev.streak;
+      if (prev.lastPlayed !== today) {
+        const y = new Date(); y.setDate(y.getDate() - 1);
+        streak = prev.lastPlayed === y.toISOString().slice(0, 10) ? prev.streak + 1 : 1;
+      }
+      let xpGain = Math.round(wordsRead / 8);
+      if (quizCorrect === true) xpGain += 20;
+      if (isLadder) xpGain += 25 * (roundsCleared || 0);
+      if (extra.recallScore != null) xpGain += 15 * extra.recallScore;
+
+      let dailyBonus = false;
+      let lastLadderDate = prev.lastLadderDate;
+      if (isLadder && runType === "ladder" && prev.lastLadderDate !== today) {
+        xpGain += 30;
+        dailyBonus = true;
+        lastLadderDate = today;
+      }
+
+      const totalSessions = prev.totalSessions + 1;
+      const newXp = prev.xp + xpGain;
+      const before = levelOf(prev.xp), after = levelOf(newXp);
+
+      const unlocked = [];
+      const has = (id) => prev.achievements.includes(id);
+      if (!has("first_session")) unlocked.push("first_session");
+      if (actualWpm >= 300 && !has("speed_300")) unlocked.push("speed_300");
+      if (streak >= 3 && !has("streak_3")) unlocked.push("streak_3");
+      if (streak >= 7 && !has("streak_7")) unlocked.push("streak_7");
+      if (isLadder && runType === "ladder" && !has("challenger")) unlocked.push("challenger");
+      if (isLadder && runType === "ladder" && roundsCleared >= 6 && !has("ladder_master")) unlocked.push("ladder_master");
+      if (isCustom && !has("own_words")) unlocked.push("own_words");
+      if (extra.isAi && !has("ai_explorer")) unlocked.push("ai_explorer");
+      if (totalSessions >= 10 && !has("bookworm")) unlocked.push("bookworm");
+      if (extra.recallScore === 3 && !has("sharp_memory")) unlocked.push("sharp_memory");
+      if (extra.marathonRounds >= 15 && !has("marathoner")) unlocked.push("marathoner");
+
+      const bestLadderWpm = (isLadder && runType === "ladder") ? Math.max(prev.bestLadderWpm, actualWpm) : prev.bestLadderWpm;
+      const marathonBest = extra.marathonRounds != null ? Math.max(prev.marathonBest, extra.marathonRounds) : prev.marathonBest;
+
+      setSessionSummary({ xpGain, leveledUp: after > before, newLevel: after, streak, unlocked, bestLadderWpm, dailyBonus, marathonBest, recallScore: extra.recallScore });
+      const history = prev.history.includes(today) ? prev.history : [...prev.history, today].slice(-30);
+      return { ...prev, xp: newXp, streak, lastPlayed: today, lastLadderDate, totalSessions, achievements: [...prev.achievements, ...unlocked], bestLadderWpm, marathonBest, history };
+    });
+  };
+
+  // ---- practice session builders ----
+  const startPractice = () => {
+    setRunType("practice");
+    if (mode === "flow") {
+      const pool = FLOW_PARAGRAPHS[difficulty];
+      const item = pool[Math.floor(Math.random() * pool.length)];
+      setTokens(item.text.split(/\s+/));
+      setCurrentQ(item.q);
+      totalWordsRef.current = item.text.split(/\s+/).length;
+    } else {
+      setSentences(SENTENCE_POOLS[difficulty]);
+      setCurrentQ(null);
+      totalWordsRef.current = SENTENCE_POOLS[difficulty].join(" ").split(/\s+/).length;
+    }
+    setIsCustomRun(false);
+    setIndex(0); setPlaying(true); setSelectedOpt(null);
+    startRef.current = Date.now();
+    setScreen("reading");
+  };
+
+  const startCustom = () => {
+    const text = customText.trim();
+    if (!text) return;
+    setRunType("practice");
+    setIsCustomRun(true);
+    if (customMode === "flow") {
+      const words = text.split(/\s+/).filter(Boolean);
+      setTokens(words);
+      totalWordsRef.current = words.length;
+    } else {
+      const sents = (text.match(/[^.!?]+[.!?]+|\S+$/g) || [text]).map((s) => s.trim()).filter(Boolean);
+      setSentences(sents);
+      totalWordsRef.current = text.split(/\s+/).filter(Boolean).length;
+    }
+    setMode(customMode);
+    setIsAiRun(false);
+    setIndex(0); setPlaying(true); setSelectedOpt(null);
+    startRef.current = Date.now();
+    setScreen("reading");
+  };
+
+  const startAiPractice = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const item = await callClaudeForPassage(aiLang, aiDifficulty, aiTopic.trim());
+      setRunType("practice");
+      setMode("flow");
+      setIsCustomRun(false);
+      setIsAiRun(true);
+      setTokens(item.text.split(/\s+/));
+      setCurrentQ(item.q);
+      totalWordsRef.current = item.text.split(/\s+/).length;
+      setIndex(0); setPlaying(true); setSelectedOpt(null);
+      startRef.current = Date.now();
+      setScreen("reading");
+    } catch (e) {
+      setAiError("Couldn't generate right now — try again in a moment.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const generateQuizForCustom = async () => {
+    if (!customText.trim()) return;
+    setQuizLoading(true);
+    try {
+      const q = await callClaudeForQuiz(customText.trim(), lang);
+      setCurrentQ(q);
+    } catch (e) {
+      setAiError("Couldn't create a quiz for this text — try again.");
+    } finally {
+      setQuizLoading(false);
+    }
+  };
+
+
+  const startLadder = (startWpm) => {
+    setRunType("ladder");
+    setMode("flow");
+    ladderRoundsRef.current = buildLadderRounds();
+    setRoundIndex(0); setLives(3); setRoundWpm(startWpm);
+    const item = ladderRoundsRef.current[0];
+    setTokens(item.text.split(/\s+/));
+    setCurrentQ(item.q);
+    totalWordsRef.current = item.text.split(/\s+/).length;
+    setIndex(0); setPlaying(true); setSelectedOpt(null);
+    startRef.current = Date.now();
+    setWpm(startWpm);
+    setScreen("reading");
+  };
+
+  const nextLadderRound = (nextLives) => {
+    const nr = roundIndex + 1;
+    if (nr >= ladderRoundsRef.current.length || nextLives <= 0) {
+      finishSession(roundWpm, totalWordsRef.current, null, true, nr >= ladderRoundsRef.current.length ? 6 : nr);
+      setScreen("done");
+      return;
+    }
+    const nwpm = roundWpm + LADDER_STEP;
+    const item = ladderRoundsRef.current[nr];
+    setRoundIndex(nr); setRoundWpm(nwpm); setWpm(nwpm);
+    setTokens(item.text.split(/\s+/));
+    setCurrentQ(item.q);
+    totalWordsRef.current = item.text.split(/\s+/).length;
+    setIndex(0); setSelectedOpt(null); setPlaying(true);
+    setScreen("reading");
+  };
+
+  // ---- Marathon: fixed pace, endless survival ----
+  const startMarathon = (startWpm) => {
+    setRunType("marathon");
+    setMode("flow");
+    marathonQueueRef.current = pickN(ALL_PARAGRAPHS, ALL_PARAGRAPHS.length);
+    marathonPosRef.current = 0;
+    setRoundIndex(0); setLives(3); setRoundWpm(startWpm); setWpm(startWpm);
+    const item = marathonQueueRef.current[0];
+    setTokens(item.text.split(/\s+/));
+    setCurrentQ(item.q);
+    totalWordsRef.current = item.text.split(/\s+/).length;
+    setIndex(0); setPlaying(true); setSelectedOpt(null);
+    startRef.current = Date.now();
+    setScreen("reading");
+  };
+
+  const nextMarathonRound = (nextLives) => {
+    const nr = roundIndex + 1;
+    if (nextLives <= 0) {
+      finishSession(roundWpm, totalWordsRef.current, null, false, 0, false, { marathonRounds: nr });
+      setScreen("done");
+      return;
+    }
+    marathonPosRef.current += 1;
+    if (marathonPosRef.current >= marathonQueueRef.current.length) {
+      marathonQueueRef.current = pickN(ALL_PARAGRAPHS, ALL_PARAGRAPHS.length);
+      marathonPosRef.current = 0;
+    }
+    const item = marathonQueueRef.current[marathonPosRef.current];
+    setRoundIndex(nr);
+    setTokens(item.text.split(/\s+/));
+    setCurrentQ(item.q);
+    totalWordsRef.current = item.text.split(/\s+/).length;
+    setIndex(0); setSelectedOpt(null); setPlaying(true);
+    setScreen("reading");
+  };
+
+  // ---- Recall Rush: 3 passages back-to-back, then rapid-fire quiz ----
+  const startRecall = () => {
+    setRunType("recall");
+    setMode("flow");
+    recallQueueRef.current = pickN(ALL_PARAGRAPHS, 3);
+    setRecallIdx(0); setRecallScore(0);
+    const item = recallQueueRef.current[0];
+    setTokens(item.text.split(/\s+/));
+    setCurrentQ(null);
+    totalWordsRef.current = item.text.split(/\s+/).length;
+    setIndex(0); setPlaying(true); setSelectedOpt(null);
+    startRef.current = Date.now();
+    setScreen("reading");
+  };
+
+  const advanceRecallReading = () => {
+    const nr = recallIdx + 1;
+    if (nr < 3) {
+      const item = recallQueueRef.current[nr];
+      setRecallIdx(nr);
+      setTokens(item.text.split(/\s+/));
+      totalWordsRef.current += item.text.split(/\s+/).length;
+      setIndex(0); setPlaying(true);
+    } else {
+      setRecallIdx(0);
+      setRecallTimeLeft(10);
+      setSelectedOpt(null);
+      setScreen("recall-quiz");
+    }
+  };
+
+  useEffect(() => {
+    if (screen !== "recall-quiz") { clearInterval(recallTimerRef.current); return; }
+    clearInterval(recallTimerRef.current);
+    recallTimerRef.current = setInterval(() => {
+      setRecallTimeLeft((s) => {
+        if (s <= 1) { clearInterval(recallTimerRef.current); answerRecall(-1); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(recallTimerRef.current);
+  }, [screen, recallIdx]); // eslint-disable-line
+
+  const answerRecall = (optIndex) => {
+    if (selectedOpt !== null) return;
+    setSelectedOpt(optIndex);
+    clearInterval(recallTimerRef.current);
+    const q = recallQueueRef.current[recallIdx].q;
+    const correct = optIndex === q.answer;
+    const newScore = recallScore + (correct ? 1 : 0);
+    setRecallScore(newScore);
+    setTimeout(() => {
+      const nr = recallIdx + 1;
+      if (nr < 3) {
+        setRecallIdx(nr); setSelectedOpt(null); setRecallTimeLeft(10);
+      } else {
+        finishSession(0, totalWordsRef.current, null, false, 0, false, { recallScore: newScore });
+        setScreen("done");
+      }
+    }, 900);
+  };
+
+  // ---- advance loop ----
+  useEffect(() => {
+    if (screen !== "reading" || !playing) return;
+    const list = mode === "flow" ? tokens : sentences;
+    if (index >= list.length) {
+      setElapsedFinal(Date.now() - startRef.current);
+      if (runType === "recall") { advanceRecallReading(); return; }
+      if (mode === "flow" && currentQ) setScreen("quiz");
+      else finalizeNoQuiz();
+      return;
+    }
+    const token = list[index];
+    let delay;
+    if (mode === "flow") {
+      delay = 60000 / wpm;
+      if (/[.,!?;:]$/.test(token)) delay *= 1.7;
+      else if (token.length > 7) delay *= 1.15;
+    } else {
+      const wc = token.split(/\s+/).length;
+      delay = Math.max((wc / wpm) * 60000, 700);
+    }
+    const t = setTimeout(() => setIndex((i) => i + 1), delay);
+    return () => clearTimeout(t);
+  }, [screen, playing, index, wpm, mode, tokens, sentences]); // eslint-disable-line
+
+  const finalizeNoQuiz = () => {
+    const mins = Math.max((Date.now() - startRef.current) / 60000, 1 / 60000);
+    const actual = Math.round(totalWordsRef.current / mins) || 0;
+    finishSession(actual, totalWordsRef.current, null, false, 0, isCustomRun);
+    setScreen("done");
+  };
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (screen === "reading" && e.code === "Space") { e.preventDefault(); setPlaying((p) => !p); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [screen]);
+
+  const answerQuiz = (optIndex) => {
+    if (selectedOpt !== null) return;
+    setSelectedOpt(optIndex);
+    const correct = optIndex === currentQ.answer;
+    const mins = Math.max((Date.now() - startRef.current) / 60000, 1 / 60000);
+    const actual = Math.round(totalWordsRef.current / mins) || 0;
+
+    setTimeout(() => {
+      if (runType === "ladder") {
+        const nextLives = correct ? lives : lives - 1;
+        setLives(nextLives);
+        nextLadderRound(nextLives);
+      } else if (runType === "marathon") {
+        const nextLives = correct ? lives : lives - 1;
+        setLives(nextLives);
+        nextMarathonRound(nextLives);
+      } else {
+        finishSession(actual, totalWordsRef.current, correct, false, 0, isCustomRun, { isAi: isAiRun });
+        setScreen("done");
+      }
+    }, 1100);
+  };
+
+  const list = mode === "flow" ? tokens : sentences;
+  const progress = list.length ? Math.min((index / list.length) * 100, 100) : 0;
+  const currentWord = mode === "flow" ? (tokens[index] || "") : "";
+  const oi = currentWord ? Math.min(orpIndex(currentWord), currentWord.length - 1) : 0;
+  const left = currentWord.slice(0, oi), mid = currentWord[oi] || "", right = currentWord.slice(oi + 1);
+
+  const level = levelOf(profile.xp);
+  const xpIntoLevel = profile.xp % XP_STEP;
+
+  const Progress = () => (
+    <div className="flex items-center gap-3 bg-amber-100 border border-amber-200 rounded-2xl px-4 py-2.5">
+      <div className="w-9 h-9 rounded-full bg-amber-400 flex items-center justify-center font-bold text-stone-900">
+        {level}
+      </div>
+      <div className="flex-1 min-w-[80px]">
+        <div className="h-1.5 bg-amber-200 rounded-full overflow-hidden">
+          <div className="h-full bg-amber-600" style={{ width: `${(xpIntoLevel / XP_STEP) * 100}%` }} />
+        </div>
+      </div>
+      <div className="text-sm text-stone-500 whitespace-nowrap">🔥 {profile.streak}</div>
+    </div>
+  );
+
+  return (
+    <div data-theme={theme} className="min-h-screen w-full flex flex-col items-center relative overflow-hidden select-none t-page">
+      <style>{`
+        @keyframes popIn { 0%{opacity:0; transform:scale(0.95) translateY(6px)} 100%{opacity:1; transform:scale(1) translateY(0)} }
+        .pop { animation: popIn 0.25s ease-out; }
+        ${Object.entries(THEMES).map(([key, th]) => `
+          [data-theme="${key}"] { --page:${th.vars.page}; --card:${th.vars.card}; --cardBorder:${th.vars.cardBorder}; --dark:${th.vars.dark}; --darkText:${th.vars.darkText}; --primary:${th.vars.primary}; --primaryText:${th.vars.primaryText}; --selected:${th.vars.selected}; --selectedText:${th.vars.selectedText}; --text:${th.vars.text}; --muted:${th.vars.muted}; }
+        `).join("\n")}
+        .t-page { background: var(--page); color: var(--text); }
+        .t-card { background: var(--card); border: 1px solid var(--cardBorder); color: var(--text); }
+        .t-dark { background: var(--dark); color: var(--darkText); }
+        .t-muted { color: var(--muted); }
+        .t-btn-primary { background: var(--primary); color: var(--primaryText); }
+        .t-btn-primary:active { filter: brightness(0.9); }
+        .t-btn-selected { background: var(--selected); color: var(--selectedText); border: 1px solid var(--selected); }
+        .t-btn-unselected { background: var(--card); border: 1px solid var(--cardBorder); color: var(--muted); }
+        .t-btn-unselected:active { background: var(--selected); color: var(--selectedText); opacity: 0.85; }
+        .t-btn-ghost { background: transparent; color: var(--muted); }
+        .t-btn-ghost:active { color: var(--text); background: var(--card); }
+        .t-btn-dark { background: var(--dark); color: var(--darkText); }
+        .t-accent-text { color: var(--selected); }
+        .t-track { background: var(--cardBorder); }
+        .t-fill { background: var(--muted); }
+      `}</style>
+
+      {!user && (
+        <div className="w-full max-w-md px-5 pt-10 pb-16 pop">
+          <div className="font-serif text-3xl font-semibold mb-1">Reader</div>
+          <p className="t-muted text-sm mb-8">{authMode === "login" ? "Log in to sync your progress." : "Create an account to save your progress in the cloud."}</p>
+
+          <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="Email"
+            className="w-full t-card rounded-2xl px-4 py-3 mb-3 outline-none" autoCapitalize="off" autoCorrect="off" />
+          <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="Password (min 6 characters)"
+            className="w-full t-card rounded-2xl px-4 py-3 mb-4 outline-none" />
+
+          {authError && <p className="text-sm text-rose-600 mb-4">{authError}</p>}
+
+          <Btn variant="primary" className="w-full py-3.5 mb-3" disabled={authBusy} onClick={doAuth}>
+            {authBusy ? "Please wait…" : authMode === "login" ? "Log in" : "Sign up"}
+          </Btn>
+          <button onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthError(null); }}
+            className="w-full text-center text-sm t-muted py-2">
+            {authMode === "login" ? "New here? Create an account" : "Already have an account? Log in"}
+          </button>
+        </div>
+      )}
+
+      {user && (
+      <React.Fragment>
+      <div className="w-full max-w-md px-5 pt-6 pb-3 flex items-center justify-between">
+        <div className="font-serif text-2xl font-semibold">{t("appName")}</div>
+        {loaded && (
+          <div className="flex items-center gap-3 t-card rounded-2xl px-4 py-2.5">
+            <div className="w-9 h-9 rounded-full t-btn-primary flex items-center justify-center font-bold">{level}</div>
+            <div className="flex-1 min-w-[80px]">
+              <div className="h-1.5 t-track rounded-full overflow-hidden">
+                <div className="h-full t-fill" style={{ width: `${(xpIntoLevel / XP_STEP) * 100}%` }} />
+              </div>
+            </div>
+            <div className="text-sm t-muted whitespace-nowrap">🔥 {profile.streak}</div>
+          </div>
+        )}
+      </div>
+
+      {/* HOME */}
+      {screen === "home" && (
+        <div className="w-full max-w-md px-5 pb-16 pop">
+          <p className="t-muted text-sm mb-4">{t("tagline")}</p>
+
+          <div className="t-dark rounded-3xl p-5 mb-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="text-4xl">🔥</div>
+              <div>
+                <div className="font-serif text-2xl font-bold leading-none">{profile.streak} day{profile.streak === 1 ? "" : "s"}</div>
+                <div className="text-xs opacity-70 mt-1">
+                  {profile.streak === 0 ? "Start today to begin your streak" :
+                   profile.streak < 3 ? "Nice start — keep it going" :
+                   profile.streak < 7 ? "On a roll! A few more for a full week" :
+                   profile.streak < 30 ? "Strong habit forming 💪" : "Incredible consistency 🏆"}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-1.5">
+              {Array.from({ length: 7 }).map((_, i) => {
+                const d = new Date(); d.setDate(d.getDate() - (6 - i));
+                const ds = d.toISOString().slice(0, 10);
+                const done = profile.history.includes(ds);
+                const isToday = ds === todayStr();
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                    <div className="w-full h-8 rounded-lg flex items-center justify-center text-sm"
+                      style={{ background: done ? "var(--selected)" : "rgba(255,255,255,0.15)", border: isToday ? "2px solid var(--darkText)" : "none" }}>
+                      {done ? "✓" : ""}
+                    </div>
+                    <div className="text-[9px] opacity-60">{d.toLocaleDateString(undefined, { weekday: "narrow" })}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="text-xs uppercase tracking-widest t-muted mb-2">{t("theme")} — tap a color to cycle its 3 shades</div>
+          <div className="flex items-center gap-3 mb-4">
+            {FAMILY_ORDER.map((fam) => {
+              const currentShade = theme.startsWith(fam) ? theme.slice(fam.length) : null;
+              const displayKey = currentShade ? theme : `${fam}1`;
+              const th = THEMES[displayKey];
+              const isActiveFamily = !!currentShade;
+              return (
+                <button key={fam}
+                  onClick={() => {
+                    if (isActiveFamily) {
+                      const n = parseInt(currentShade, 10);
+                      const next = (n % 3) + 1;
+                      setTheme(`${fam}${next}`);
+                    } else {
+                      setTheme(`${fam}1`);
+                    }
+                  }}
+                  className="flex flex-col items-center gap-1 transition-all active:scale-90">
+                  <div className="w-9 h-9 rounded-full"
+                    style={{ background: th.swatch, border: isActiveFamily ? "3px solid var(--selected)" : "2px solid transparent" }} />
+                  <span className="text-[10px] t-muted">{isActiveFamily ? th.name : fam.charAt(0).toUpperCase() + fam.slice(1)}</span>
+                </button>
+              );
+            })}
+          </div>
+          <select value={lang} onChange={(e) => setLang(e.target.value)} className="mb-6 text-sm t-card rounded-xl px-3 py-2 outline-none">
+            {LANG_LIST.map((l) => <option key={l.key} value={l.key}>{l.native}</option>)}
+          </select>
+
+          <div className="t-card rounded-3xl p-5 mb-4">
+            <div className="font-serif text-xl font-semibold mb-1">{t("practiceTitle")}</div>
+            <p className="text-sm t-muted mb-4">{t("practiceDesc")}</p>
+            <Btn variant="primary" className="w-full py-3" onClick={() => setScreen("practice-setup")}>{t("startPractice")}</Btn>
+          </div>
+
+          <div className="t-dark rounded-3xl p-5 mb-4">
+            <div className="font-serif text-xl font-semibold mb-1">{t("ladderTitle")}</div>
+            <p className="text-sm opacity-80 mb-1">{t("ladderDesc")}</p>
+            {profile.bestLadderWpm > 0 && <p className="text-xs opacity-70 mb-1">Best pace: {profile.bestLadderWpm} wpm</p>}
+            <p className="text-xs opacity-70 mb-4">{profile.lastLadderDate === todayStr() ? t("dailyBonusClaimed") : t("dailyBonusAvail")}</p>
+            <Btn variant="primary" className="w-full py-3" onClick={() => setScreen("ladder-setup")}>{t("climbLadder")}</Btn>
+          </div>
+
+          <div className="t-card rounded-3xl p-5 mb-4">
+            <div className="font-serif text-xl font-semibold mb-1">{t("recallTitle")}</div>
+            <p className="text-sm t-muted mb-4">{t("recallDesc")}</p>
+            <Btn variant="primary" className="w-full py-3" onClick={startRecall}>{t("startRecall")}</Btn>
+          </div>
+
+          <div className="t-dark rounded-3xl p-5 mb-4">
+            <div className="font-serif text-xl font-semibold mb-1">{t("marathonTitle")}</div>
+            <p className="text-sm opacity-80 mb-1">{t("marathonDesc")}</p>
+            {profile.marathonBest > 0 && <p className="text-xs opacity-70 mb-4">Best run: {profile.marathonBest} rounds</p>}
+            {profile.marathonBest === 0 && <div className="mb-4" />}
+            <Btn variant="primary" className="w-full py-3" onClick={() => setScreen("marathon-setup")}>{t("startMarathon")}</Btn>
+          </div>
+
+          <div className="t-card rounded-3xl p-5 mb-4">
+            <div className="font-serif text-xl font-semibold mb-1">🪄 AI Practice</div>
+            <p className="text-sm t-muted mb-4">Ask Claude to write you a fresh passage — in Hindi or any of the 6 languages — with its own quiz.</p>
+            <Btn variant="primary" className="w-full py-3" onClick={() => { setAiError(null); setScreen("ai-setup"); }}>Generate with AI</Btn>
+          </div>
+
+          <div className="t-card rounded-3xl p-5 mb-4">
+            <div className="font-serif text-xl font-semibold mb-1">{t("importTitle")}</div>
+            <p className="text-sm t-muted mb-4">{t("importDesc")}</p>
+            <Btn variant="primary" className="w-full py-3" onClick={() => { setCustomText(""); setCurrentQ(null); setAiError(null); setScreen("import-setup"); }}>{t("bringOwn")}</Btn>
+          </div>
+
+          <div className="t-card rounded-3xl p-5 mb-4">
+            <div className="font-serif text-xl font-semibold mb-1">💬 Feedback</div>
+            <p className="text-sm t-muted mb-4">Something broken, confusing, or an idea for what's next? Tell me directly.</p>
+            <Btn variant="primary" className="w-full py-3" onClick={() => { setFeedbackSent(false); setScreen("feedback"); }}>Give feedback</Btn>
+          </div>
+
+          <button onClick={() => setScreen("achievements")} className="w-full text-center text-sm t-muted py-3">
+            🏆 {profile.achievements.length}/{Object.keys(ACHIEVEMENTS).length} {t("achievementsLink")}
+          </button>
+          <div className="text-center text-xs t-muted mt-2 mb-1">{user.email}</div>
+          <button onClick={doLogout} className="w-full text-center text-sm t-muted py-2 underline">Log out</button>
+        </div>
+      )}
+
+      {/* FEEDBACK */}
+      {screen === "feedback" && (
+        <div className="w-full max-w-md px-5 pb-16 pop">
+          <div className="font-serif text-2xl font-semibold mb-2">💬 Feedback</div>
+          {feedbackSent ? (
+            <div className="t-card rounded-2xl p-6 text-center">
+              <div className="text-3xl mb-2">✅</div>
+              <p className="font-semibold mb-1">Thanks — got it!</p>
+              <p className="text-sm t-muted mb-6">Your note is saved. Really helps shape what gets built next.</p>
+              <Btn variant="primary" className="w-full py-3" onClick={() => setScreen("home")}>{t("back")}</Btn>
+            </div>
+          ) : (
+            <React.Fragment>
+              <p className="text-sm t-muted mb-4">How's the app feeling overall?</p>
+              <div className="flex gap-2 mb-6">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button key={n} onClick={() => setFeedbackRating(n)} className="text-3xl transition-all active:scale-90">
+                    {n <= feedbackRating ? "⭐" : "☆"}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                placeholder="What's working, what's not, what would you want to see next…"
+                rows={6}
+                className="w-full rounded-2xl t-card p-4 text-sm mb-6 outline-none"
+              />
+              <Btn variant="primary" className="w-full py-3.5 mb-2" disabled={feedbackBusy || (!feedbackText.trim() && feedbackRating === 0)} onClick={submitFeedback}>
+                {feedbackBusy ? "Sending…" : "Send feedback"}
+              </Btn>
+              <Btn variant="ghost" className="w-full py-3" onClick={() => setScreen("home")}>{t("back")}</Btn>
+            </React.Fragment>
+          )}
+        </div>
+      )}
+
+      {/* AI PRACTICE SETUP */}
+      {screen === "ai-setup" && (
+        <div className="w-full max-w-md px-5 pb-16 pop">
+          <div className="font-serif text-2xl font-semibold mb-2">🪄 AI Practice</div>
+          <p className="text-sm t-muted mb-6">Claude will write a fresh short passage and quiz just for this session.</p>
+
+          <div className="mb-6">
+            <div className="text-xs uppercase tracking-widest t-muted mb-2">Language</div>
+            <select value={aiLang} onChange={(e) => setAiLang(e.target.value)} className="w-full t-card rounded-2xl px-4 py-3 outline-none">
+              {LANG_LIST.map((l) => <option key={l.key} value={l.key}>{l.native}</option>)}
+            </select>
+          </div>
+
+          <div className="mb-6">
+            <div className="text-xs uppercase tracking-widest t-muted mb-2">{t("difficulty")}</div>
+            <div className="flex gap-2">
+              {["easy", "medium", "hard"].map((d) => (
+                <Btn key={d} variant="secondary" active={aiDifficulty === d} className="flex-1 py-3 capitalize" onClick={() => setAiDifficulty(d)}>{d}</Btn>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-9">
+            <div className="text-xs uppercase tracking-widest t-muted mb-2">Topic (optional)</div>
+            <input value={aiTopic} onChange={(e) => setAiTopic(e.target.value)} placeholder="e.g. cricket, cooking, space…"
+              className="w-full t-card rounded-2xl px-4 py-3 outline-none" />
+          </div>
+
+          {aiError && <p className="text-sm text-rose-600 mb-4">{aiError}</p>}
+
+          <Btn variant="primary" className="w-full py-3.5 mb-2" disabled={aiLoading} onClick={startAiPractice}>
+            {aiLoading ? "Generating…" : "Generate & read"}
+          </Btn>
+          <Btn variant="ghost" className="w-full py-3" onClick={() => setScreen("home")}>{t("back")}</Btn>
+        </div>
+      )}
+
+      {/* MARATHON SETUP */}
+      {screen === "marathon-setup" && (
+        <div className="w-full max-w-md px-5 pb-16 pop">
+          <div className="font-serif text-2xl font-semibold mb-2">{t("marathonTitle")}</div>
+          <p className="text-sm t-muted mb-6">Pick a pace that stays constant — no speed jumps. See how many rounds you can clear before losing 3 lives.</p>
+          <div className="space-y-3">
+            {LADDER_STARTS.map((s) => (
+              <button key={s.label} onClick={() => startMarathon(s.wpm)}
+                className="w-full text-left t-card rounded-2xl px-5 py-4 flex items-center justify-between transition-all active:scale-[0.98]">
+                <div>
+                  <div className="font-semibold font-serif text-lg">{s.label}</div>
+                  <div className="text-xs t-muted">{s.wpm} wpm, constant</div>
+                </div>
+                <div className="text-xl">→</div>
+              </button>
+            ))}
+          </div>
+          <Btn variant="ghost" className="w-full py-3 mt-6" onClick={() => setScreen("home")}>{t("back")}</Btn>
+        </div>
+      )}
+
+      {/* IMPORT YOUR TEXT */}
+      {screen === "import-setup" && (
+        <div className="w-full max-w-md px-5 pb-16 pop">
+          <div className="font-serif text-2xl font-semibold mb-2">{t("yourText")}</div>
+          <p className="text-sm t-muted mb-4">{t("pasteHint")}</p>
+
+          <textarea
+            value={customText}
+            onChange={(e) => { setCustomText(e.target.value); setCurrentQ(null); }}
+            placeholder="Paste an article, your notes, a book excerpt…"
+            rows={7}
+            className="w-full rounded-2xl t-card p-4 text-sm mb-3 outline-none"
+          />
+
+          <label className="block mb-6">
+            <div className="w-full text-center rounded-2xl t-btn-unselected py-3 text-sm font-semibold transition-all">
+              {t("uploadTxt")}
+            </div>
+            <input
+              type="file"
+              accept=".txt,text/plain"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => setCustomText(String(ev.target.result || ""));
+                reader.readAsText(file);
+              }}
+            />
+          </label>
+
+          <div className="mb-6">
+            <div className="text-xs uppercase tracking-widest text-stone-500 mb-2">Mode</div>
+            <div className="flex gap-2">
+              <Btn variant="secondary" active={customMode === "flow"} className="flex-1 py-3" onClick={() => setCustomMode("flow")}>Flow (word)</Btn>
+              <Btn variant="secondary" active={customMode === "sentences"} className="flex-1 py-3" onClick={() => setCustomMode("sentences")}>Sentences</Btn>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <div className="text-xs uppercase tracking-widest t-muted mb-2">Speed — {wpm} wpm</div>
+            <input type="range" min={100} max={1800} step={50} value={wpm} onChange={(e) => setWpm(Number(e.target.value))} className="w-full accent-amber-500" />
+          </div>
+
+          {customMode === "flow" && customText.trim() && (
+            <div className="mb-6">
+              {currentQ ? (
+                <div className="t-card rounded-2xl px-4 py-3 text-sm">✅ Quiz ready — you'll be asked "{currentQ.question}" after reading.</div>
+              ) : (
+                <Btn variant="secondary" className="w-full py-3" disabled={quizLoading} onClick={generateQuizForCustom}>
+                  {quizLoading ? "Writing a quiz…" : "🪄 Generate a quiz for this text (AI)"}
+                </Btn>
+              )}
+            </div>
+          )}
+
+          <Btn variant="primary" className="w-full py-3.5 mb-2" disabled={!customText.trim()} onClick={startCustom}>Start reading</Btn>
+          <Btn variant="ghost" className="w-full py-3" onClick={() => setScreen("home")}>← Back</Btn>
+        </div>
+      )}
+
+      {/* ACHIEVEMENTS */}
+      {screen === "achievements" && (
+        <div className="w-full max-w-md px-5 pb-16 pop">
+          <div className="font-serif text-xl font-semibold mb-4">Achievements</div>
+          <div className="space-y-2 mb-6">
+            {Object.entries(ACHIEVEMENTS).map(([id, a]) => {
+              const done = profile.achievements.includes(id);
+              return (
+                <div key={id} className={`rounded-2xl border px-4 py-3 flex items-center gap-3 ${done ? "bg-amber-100 border-amber-200" : "bg-transparent border-amber-200 opacity-50"}`}>
+                  <div className="text-xl">{done ? "🏆" : "🔒"}</div>
+                  <div>
+                    <div className="font-semibold text-sm">{a.label}</div>
+                    <div className="text-xs text-stone-500">{a.desc}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <Btn variant="ghost" className="w-full py-3" onClick={() => setScreen("home")}>← Back</Btn>
+        </div>
+      )}
+
+      {/* PRACTICE SETUP */}
+      {screen === "practice-setup" && (
+        <div className="w-full max-w-md px-5 pb-16 pop">
+          <div className="font-serif text-2xl font-semibold mb-6">Set your pace</div>
+
+          <div className="mb-6">
+            <div className="text-xs uppercase tracking-widest text-stone-500 mb-2">Mode</div>
+            <div className="flex gap-2">
+              <Btn variant="secondary" active={mode === "flow"} className="flex-1 py-3" onClick={() => setMode("flow")}>Flow (word)</Btn>
+              <Btn variant="secondary" active={mode === "sentences"} className="flex-1 py-3" onClick={() => setMode("sentences")}>Sentences</Btn>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <div className="text-xs uppercase tracking-widest text-stone-500 mb-2">Difficulty</div>
+            <div className="flex gap-2">
+              {["easy", "medium", "hard"].map((d) => (
+                <Btn key={d} variant="secondary" active={difficulty === d} className="flex-1 py-3 capitalize" onClick={() => setDifficulty(d)}>{d}</Btn>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-9">
+            <div className="text-xs uppercase tracking-widest text-stone-500 mb-2">Speed — {wpm} wpm</div>
+            <input type="range" min={100} max={1800} step={50} value={wpm} onChange={(e) => setWpm(Number(e.target.value))}
+              className="w-full accent-amber-500 mb-2" />
+            <div className="flex gap-1.5 flex-wrap">
+              {[300, 600, 900, 1200, 1500, 1800].map((p) => (
+                <Btn key={p} variant="secondary" active={wpm === p} className="px-3 py-1.5 text-xs" onClick={() => setWpm(p)}>{p}</Btn>
+              ))}
+            </div>
+          </div>
+
+          <Btn variant="primary" className="w-full py-3.5 mb-2" onClick={startPractice}>Start reading</Btn>
+          <Btn variant="ghost" className="w-full py-3" onClick={() => setScreen("home")}>← Back</Btn>
+        </div>
+      )}
+
+      {/* LADDER SETUP */}
+      {screen === "ladder-setup" && (
+        <div className="w-full max-w-md px-5 pb-16 pop">
+          <div className="font-serif text-2xl font-semibold mb-2">{t("ladderTitle")}</div>
+          <p className="text-sm t-muted mb-6">6 rounds, each +{LADDER_STEP} wpm faster than the last. Miss two questions and the run ends. Pick your starting pace.</p>
+          <div className="space-y-3">
+            {LADDER_STARTS.map((s) => (
+              <button key={s.label} onClick={() => startLadder(s.wpm)}
+                className="w-full text-left t-card rounded-2xl px-5 py-4 flex items-center justify-between transition-all active:scale-[0.98]">
+                <div>
+                  <div className="font-semibold font-serif text-lg">{s.label}</div>
+                  <div className="text-xs t-muted">Starts at {s.wpm} wpm</div>
+                </div>
+                <div className="text-xl">→</div>
+              </button>
+            ))}
+          </div>
+          <Btn variant="ghost" className="w-full py-3 mt-6" onClick={() => setScreen("home")}>{t("back")}</Btn>
+        </div>
+      )}
+
+      {/* READING */}
+      {screen === "reading" && (
+        <div className="w-full max-w-md px-5 flex-1 flex flex-col">
+          {runType === "ladder" && (
+            <div className="flex items-center justify-between mb-3 text-sm">
+              <div className="font-semibold">Round {roundIndex + 1}/6</div>
+              <div>{"❤️".repeat(lives)}{"🤍".repeat(3 - lives)}</div>
+              <div className="t-muted">{roundWpm} wpm</div>
+            </div>
+          )}
+          {runType === "marathon" && (
+            <div className="flex items-center justify-between mb-3 text-sm">
+              <div className="font-semibold">Round {roundIndex + 1}</div>
+              <div>{"❤️".repeat(lives)}{"🤍".repeat(3 - lives)}</div>
+              <div className="t-muted">{roundWpm} wpm</div>
+            </div>
+          )}
+          {runType === "recall" && (
+            <div className="flex items-center justify-between mb-3 text-sm">
+              <div className="font-semibold">🧠 Passage {recallIdx + 1}/3</div>
+              <div className="t-muted">{wpm} wpm</div>
+            </div>
+          )}
+          <div className="h-1.5 t-track rounded-full overflow-hidden mb-8">
+            <div className="h-full t-btn-primary transition-all duration-150" style={{ width: `${progress}%` }} />
+          </div>
+
+          <div className="flex-1 flex items-center justify-center min-h-[260px]">
+            {mode === "flow" ? (
+              <div className="w-full flex flex-col items-center">
+                <div className="w-0.5 h-4 opacity-40 t-btn-primary mb-2" />
+                <div className="flex items-center justify-center w-full">
+                  <div className="flex-1 text-right font-serif text-4xl font-semibold t-muted">{left}</div>
+                  <div className="font-serif text-4xl font-bold t-accent-text px-0.5">{mid}</div>
+                  <div className="flex-1 text-left font-serif text-4xl font-semibold t-muted">{right}</div>
+                </div>
+                <div className="w-0.5 h-4 opacity-40 t-btn-primary mt-2" />
+              </div>
+            ) : (
+              <div className="font-serif text-2xl text-center leading-relaxed px-2">{sentences[index]}</div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <Btn variant="ghost" className="px-4 py-3" onClick={() => setScreen("home")}>←</Btn>
+            <Btn variant="dark" className="px-8 py-3" onClick={() => setPlaying((p) => !p)}>{playing ? `⏸ ${t("pause")}` : `▶ ${t("resume")}`}</Btn>
+          </div>
+          <div className="text-center text-xs t-muted mb-4">space to pause</div>
+        </div>
+      )}
+
+      {/* RECALL QUIZ (rapid-fire, 3 questions, countdown timer each) */}
+      {screen === "recall-quiz" && recallQueueRef.current[recallIdx] && (
+        <div className="w-full max-w-md px-5 pb-16 pop">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs uppercase tracking-widest t-muted">Question {recallIdx + 1}/3</div>
+            <div className="text-sm font-bold t-accent-text">⏱ {recallTimeLeft}s</div>
+          </div>
+          <div className="h-1.5 t-track rounded-full overflow-hidden mb-6">
+            <div className="h-full t-btn-primary transition-all duration-1000 linear" style={{ width: `${(recallTimeLeft / 10) * 100}%` }} />
+          </div>
+          <div className="font-serif text-xl font-semibold mb-6">{recallQueueRef.current[recallIdx].q.question}</div>
+          <div className="space-y-2.5">
+            {recallQueueRef.current[recallIdx].q.options.map((opt, i) => {
+              const q = recallQueueRef.current[recallIdx].q;
+              const isCorrect = i === q.answer;
+              const isSelected = i === selectedOpt;
+              let style = "t-btn-unselected";
+              if (selectedOpt !== null) {
+                if (isCorrect) style = "bg-emerald-200 border border-emerald-400 text-stone-900";
+                else if (isSelected) style = "bg-rose-200 border border-rose-400 text-stone-900";
+                else style = "opacity-40 t-card";
+              }
+              return (
+                <button key={i} disabled={selectedOpt !== null} onClick={() => answerRecall(i)}
+                  className={`w-full text-left rounded-2xl px-4 py-3.5 font-medium transition-all duration-150 active:scale-[0.98] ${style}`}>
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* QUIZ */}
+      {screen === "quiz" && currentQ && (
+        <div className="w-full max-w-md px-5 pb-16 pop">
+          <div className="text-xs uppercase tracking-widest t-muted mb-2">{t("quickCheck")}</div>
+          <div className="font-serif text-xl font-semibold mb-6">{currentQ.question}</div>
+          <div className="space-y-2.5">
+            {currentQ.options.map((opt, i) => {
+              const isCorrect = i === currentQ.answer;
+              const isSelected = i === selectedOpt;
+              let style = "t-btn-unselected";
+              if (selectedOpt !== null) {
+                if (isCorrect) style = "bg-emerald-200 border border-emerald-400 text-stone-900";
+                else if (isSelected) style = "bg-rose-200 border border-rose-400 text-stone-900";
+                else style = "opacity-40 t-card";
+              }
+              return (
+                <button key={i} disabled={selectedOpt !== null} onClick={() => answerQuiz(i)}
+                  className={`w-full text-left rounded-2xl px-4 py-3.5 font-medium transition-all duration-150 active:scale-[0.98] ${style}`}>
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* DONE */}
+      {screen === "done" && sessionSummary && (
+        <div className="w-full max-w-md px-5 pb-16 pop text-center">
+          <div className="text-4xl mb-3">{sessionSummary.leveledUp ? "🎉" : runType === "ladder" ? "⚡" : runType === "marathon" ? "🏃" : runType === "recall" ? "🧠" : "✅"}</div>
+          <div className="font-serif text-2xl font-semibold mb-1">
+            {sessionSummary.leveledUp ? `Level ${sessionSummary.newLevel}!` : runType === "ladder" ? "Ladder run over" : runType === "marathon" ? "Marathon over" : runType === "recall" ? "Recall Rush done" : "Session complete"}
+          </div>
+          <p className="text-sm t-muted mb-6">
+            +{sessionSummary.xpGain} XP {sessionSummary.dailyBonus ? "(includes 🎁 daily bonus) " : ""}{sessionSummary.streak > 1 ? `· 🔥 ${sessionSummary.streak} day streak` : ""}
+          </p>
+
+          {runType === "ladder" && (
+            <div className="t-card rounded-2xl py-4 mb-4">
+              <div className="font-serif text-2xl font-bold t-accent-text">{roundWpm} wpm</div>
+              <div className="text-xs uppercase tracking-widest t-muted mt-1">Peak pace reached</div>
+            </div>
+          )}
+          {runType === "marathon" && (
+            <div className="t-card rounded-2xl py-4 mb-4">
+              <div className="font-serif text-2xl font-bold t-accent-text">{roundIndex} rounds</div>
+              <div className="text-xs uppercase tracking-widest t-muted mt-1">Survived at {roundWpm} wpm{sessionSummary.marathonBest ? ` · best: ${sessionSummary.marathonBest}` : ""}</div>
+            </div>
+          )}
+          {runType === "recall" && (
+            <div className="t-card rounded-2xl py-4 mb-4">
+              <div className="font-serif text-2xl font-bold t-accent-text">{sessionSummary.recallScore}/3</div>
+              <div className="text-xs uppercase tracking-widest t-muted mt-1">Correct under time pressure</div>
+            </div>
+          )}
+
+          {sessionSummary.unlocked?.length > 0 && (
+            <div className="mb-6 space-y-2">
+              {sessionSummary.unlocked.map((id) => (
+                <div key={id} className="t-card rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 justify-center">
+                  🏆 {ACHIEVEMENTS[id].label}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <Btn variant="primary" className="flex-1 py-3" onClick={() => {
+              if (runType === "ladder") setScreen("ladder-setup");
+              else if (runType === "marathon") setScreen("marathon-setup");
+              else if (runType === "recall") startRecall();
+              else if (isCustomRun) setScreen("import-setup");
+              else setScreen("practice-setup");
+            }}>
+              {t("goAgain")}
+            </Btn>
+            <Btn variant="secondary" className="flex-1 py-3" onClick={() => setScreen("home")}>{t("home")}</Btn>
+          </div>
+        </div>
+      )}
+      </React.Fragment>
+      )}
+    </div>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<Reader />);
+</script>
+</body>
+</html>
