@@ -2,7 +2,7 @@
   "name": "Reader — Speed Reading Trainer",
   "short_name": "Reader",
   "description": "Train your reading pace with Flow and Sentence modes, plus the Speed Ladder challenge.",
-  "start_url": "./reader-standalone-3.html",
+  "start_url": "./reader-standalone[2].html",
   "display": "standalone",
   "background_color": "#FFFBEB",
   "theme_color": "#FFFBEB",
